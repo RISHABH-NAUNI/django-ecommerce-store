@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h3 class="fw-bold mb-4">Your Orders</h3>
+{% if orders %}
+    <div class="list-group shadow-sm">
+        {% for order in orders %}
+            <a href="{% url 'shop:order_detail' order.order_id %}" class="list-group-item list-group-item-action p-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="fw-bold mb-1">Order #{{ order.order_id }}</h6>
+                        <small class="text-muted">{{ order.created_at|date:"M d, Y H:i" }}</small>
+                    </div>
+                    <div>
+                        <span class="badge bg-primary me-2">{{ order.payment_status }}</span>
+                        <span class="fw-bold text-success">${{ order.total_amount }}</span>
+                    </div>
+                </div>
+            </a>
+        {% endfor %}
+    </div>
+{% else %}
+    <div class="text-center py-5">
+        <h5>You haven't placed any orders yet.</h5>
+        <a href="{% url 'shop:product_list' %}" class="btn btn-primary rounded-pill mt-2">Shop Now</a>
+    </div>
+{% endif %}
+{% endblock %}

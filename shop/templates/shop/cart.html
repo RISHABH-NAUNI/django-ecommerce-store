@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h3 class="fw-bold mb-4">Your Shopping Cart</h3>
+{% if cart %}
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div class="card border-0 shadow-sm p-3">
+                <table class="table align-middle">
+                    <thead>
+                        <tr>
+                            <th>Product</th>
+                            <th>Price</th>
+                            <th>Quantity</th>
+                            <th>Total</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in cart %}
+                            <tr>
+                                <td>{{ item.product.name }}</td>
+                                <td>${{ item.price }}</td>
+                                <td>
+                                    <form method="POST" action="{% url 'shop:cart_add' item.product.id %}" class="d-flex" style="width: 110px;">
+                                        {% csrf_token %}
+                                        <input type="number" name="quantity" value="{{ item.quantity }}" min="1" class="form-control form-control-sm me-1">
+                                        <input type="hidden" name="override" value="True">
+                                        <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="fa-solid fa-sync"></i></button>
+                                    </form>
+                                </td>
+                                <td>${{ item.total_price }}</td>
+                                <td>
+                                    <form method="POST" action="{% url 'shop:cart_remove' item.product.id %}">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-sm btn-outline-danger"><i class="fa-solid fa-trash"></i></button>
+                                    </form>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card border-0 shadow-sm p-4">
+                <h5 class="fw-bold mb-3">Order Summary</h5>
+                <div class="d-flex justify-content-between mb-3 fs-5 fw-bold">
+                    <span>Total:</span>
+                    <span class="text-primary">${{ cart.get_total_price }}</span>
+                </div>
+                <a href="{% url 'shop:checkout' %}" class="btn btn-primary btn-lg rounded-pill w-100">Proceed to Checkout</a>
+            </div>
+        </div>
+    </div>
+{% else %}
+    <div class="text-center py-5">
+        <h4>Your cart is empty.</h4>
+        <a href="{% url 'shop:product_list' %}" class="btn btn-primary rounded-pill mt-3">Start Shopping</a>
+    </div>
+{% endif %}
+{% endblock %}

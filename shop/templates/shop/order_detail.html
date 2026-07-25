@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="card border-0 shadow-sm p-4">
+    <h3 class="fw-bold text-success mb-3"><i class="fa-solid fa-circle-check me-2"></i>Order Confirmation</h3>
+    <p><strong>Order ID:</strong> #{{ order.order_id }}</p>
+    <p><strong>Total Amount:</strong> ${{ order.total_amount }}</p>
+    <p><strong>Payment Status:</strong> <span class="badge bg-primary">{{ order.payment_status }}</span></p>
+    <p><strong>Order Status:</strong> <span class="badge bg-warning text-dark">{{ order.order_status }}</span></p>
+    <p><strong>Shipping Address:</strong> {{ order.shipping_address }}</p>
+    
+    <h5 class="fw-bold mt-4 mb-3">Order Items</h5>
+    <ul class="list-group mb-4">
+        {% for item in order.items.all %}
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                <div>
+                    <h6>{{ item.product.name }}</h6>
+                    <small class="text-muted">Qty: {{ item.quantity }}</small>
+                </div>
+                <span>${{ item.get_total }}</span>
+            </li>
+        {% endfor %}
+    </ul>
+
+    <a href="{% url 'shop:product_list' %}" class="btn btn-outline-primary rounded-pill">Back to Store</a>
+</div>
+{% endblock %}

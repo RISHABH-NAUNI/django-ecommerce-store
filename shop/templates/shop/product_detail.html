@@ -1,0 +1,66 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ product.name }} - DjangoStore{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+    <div class="row">
+        <!-- Product Image -->
+        <div class="col-md-5">
+            {% if product.image %}
+                <img src="{{ product.image.url }}" class="img-fluid rounded shadow-sm" alt="{{ product.name }}">
+            {% else %}
+                <img src="https://via.placeholder.com/500x500?text=No+Image" class="img-fluid rounded shadow-sm" alt="No Image Available">
+            {% endif %}
+        </div>
+
+        <!-- Product Details -->
+        <div class="col-md-7">
+            <h2 class="fw-bold mb-2">{{ product.name }}</h2>
+            <p class="text-muted mb-3">Category: <span class="fw-semibold">{{ product.category.name }}</span></p>
+
+            <!-- Price & Discount Display -->
+            <div class="mb-3">
+                {% if product.discount_price %}
+                    <h3 class="text-primary d-inline fw-bold">${{ product.discount_price }}</h3>
+                    <span class="text-muted text-decoration-line-through ms-2 fs-5">${{ product.price }}</span>
+                    <span class="badge bg-danger ms-2">Sale</span>
+                {% else %}
+                    <h3 class="text-primary fw-bold">${{ product.price }}</h3>
+                {% endif %}
+            </div>
+
+            <!-- Description -->
+            <p class="lead text-secondary mb-4">{{ product.description }}</p>
+
+            <!-- Stock Status -->
+            <div class="mb-3">
+                {% if product.stock > 0 %}
+                    <span class="badge bg-success">In Stock ({{ product.stock }} available)</span>
+                {% else %}
+                    <span class="badge bg-danger">Out of Stock</span>
+                {% endif %}
+            </div>
+
+            <!-- Action Buttons -->
+            {% if product.stock > 0 %}
+                <div class="d-flex align-items-center gap-3 mt-4">
+                    <a href="{% url 'shop:cart_add' product.id %}" class="btn btn-primary btn-lg">
+                        <i class="bi bi-cart-plus"></i> Add to Cart
+                    </a>
+                    <a href="{% url 'shop:wishlist_toggle' product.id %}" class="btn btn-outline-danger btn-lg">
+                        <i class="bi bi-heart"></i> Wishlist
+                    </a>
+                </div>
+            {% else %}
+                <div class="mt-4">
+                    <button class="btn btn-secondary btn-lg" disabled>Out of Stock</button>
+                    <a href="{% url 'shop:wishlist_toggle' product.id %}" class="btn btn-outline-danger btn-lg ms-2">
+                        <i class="bi bi-heart"></i> Wishlist
+                    </a>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
