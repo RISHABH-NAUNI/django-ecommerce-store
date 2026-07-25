@@ -4,19 +4,69 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.views import View
 from django.views.generic import ListView, DetailView
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.contrib.auth import login
+from django.contrib.auth import login, logout
 from django.contrib import messages
 from django.utils.crypto import get_random_string
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 
-from .models import Category, Product, Order, OrderItem, Wishlist
+from .models import Category, Product, Order, OrderItem, Wishlist, CartItem
 from .cart import Cart
 from .forms import RegisterForm
 
+from django.contrib.auth.signals import user_logged_in
+from django.dispatch import receiver
+
+# Initialize Razorpay Client
 razorpay_client = razorpay.Client(
     auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET)
 )
+
+
+# ==============================================================================
+# HELPER FUNCTIONS
+# ==============================================================================
+
+def merge_guest_cart_to_user(request, user):
+    """
+    Merges session cart items into the user's database CartItem records upon login/registration.
+    """
+    cart_key = getattr(settings, 'CART_SESSION_ID', 'cart')
+    session_cart = request.session.get(cart_key, {})
+
+    # 1. Sync guest session items into Database
+    for product_id, item_data in session_cart.items():
+        try:
+            product = Product.objects.get(id=int(product_id))
+            cart_item, created = CartItem.objects.get_or_create(
+                user=user, 
+                product=product,
+                defaults={'quantity': item_data['quantity']}
+            )
+            if not created:
+                cart_item.quantity += item_data['quantity']
+                cart_item.save()
+        except (Product.DoesNotExist, ValueError):
+            continue
+
+    # 2. Re-populate session from DB for consistency
+    user_db_items = CartItem.objects.filter(user=user)
+    updated_session_cart = {}
+    
+    for db_item in user_db_items:
+        product_id = str(db_item.product.id)
+        updated_session_cart[product_id] = {
+            'quantity': db_item.quantity,
+            'price': str(db_item.product.get_discount_price())
+        }
+
+    request.session[cart_key] = updated_session_cart
+    request.session.modified = True
+
+
+# ==============================================================================
+# AUTHENTICATION VIEWS
+# ==============================================================================
 
 class RegisterView(View):
     def get(self, request):
@@ -30,10 +80,38 @@ class RegisterView(View):
             user.set_password(form.cleaned_data['password'])
             user.save()
             login(request, user)
+            merge_guest_cart_to_user(request, user)  # Sync guest cart to DB
             messages.success(request, f"Welcome {user.username}, account created successfully!")
             return redirect('shop:product_list')
         return render(request, 'registration/register.html', {'form': form})
 
+
+class CustomLogoutView(View):
+    def get(self, request):
+        return self._perform_logout(request)
+
+    def post(self, request):
+        return self._perform_logout(request)
+
+    def _perform_logout(self, request):
+        # 1. Save active cart data before flushing session
+        cart_key = getattr(settings, 'CART_SESSION_ID', 'cart')
+        saved_cart = request.session.get(cart_key, {})
+
+        # 2. Perform standard logout
+        logout(request)
+
+        # 3. Restore cart back into the new anonymous guest session
+        request.session[cart_key] = saved_cart
+        request.session.modified = True
+
+        messages.info(request, "You have been logged out.")
+        return redirect('shop:product_list')
+
+
+# ==============================================================================
+# CATALOG & PRODUCT VIEWS
+# ==============================================================================
 
 class ProductListView(ListView):
     model = Product
@@ -67,31 +145,52 @@ class ProductDetailView(DetailView):
     context_object_name = 'product'
 
 
+# ==============================================================================
+# CART VIEWS (Protected with LoginRequiredMixin)
+# ==============================================================================
+
 class CartDetailView(View):
     def get(self, request):
         cart = Cart(request)
         return render(request, 'shop/cart.html', {'cart': cart})
 
 
-class CartAddView(View):
+class CartAddView(LoginRequiredMixin, View):  # Protected: requires login
     def post(self, request, product_id):
+        return self._add_to_cart(request, product_id)
+
+    def get(self, request, product_id):
+        # Triggered when redirected here after logging in via GET
+        return self._add_to_cart(request, product_id)
+
+    def _add_to_cart(self, request, product_id):
         cart = Cart(request)
         product = get_object_or_404(Product, id=product_id)
-        quantity = int(request.POST.get('quantity', 1))
+        
+        try:
+            quantity = int(request.POST.get('quantity', 1)) if request.method == 'POST' else 1
+        except (ValueError, TypeError):
+            quantity = 1
+
         override = request.POST.get('override', False)
+        
         cart.add(product=product, quantity=quantity, override_quantity=override)
-        messages.success(request, f"Updated {product.name} in cart.")
+        messages.success(request, f"Added '{product.name}' to your cart.")
         return redirect('shop:cart_detail')
 
 
-class CartRemoveView(View):
+class CartRemoveView(LoginRequiredMixin, View):  # Protected: requires login
     def post(self, request, product_id):
         cart = Cart(request)
         product = get_object_or_404(Product, id=product_id)
         cart.remove(product)
-        messages.info(request, f"Removed {product.name} from cart.")
+        messages.info(request, f"Removed '{product.name}' from cart.")
         return redirect('shop:cart_detail')
 
+
+# ==============================================================================
+# CHECKOUT & PAYMENT VIEWS
+# ==============================================================================
 
 class CheckoutView(LoginRequiredMixin, View):
     def get(self, request):
@@ -201,15 +300,21 @@ class OrderListView(LoginRequiredMixin, View):
         return render(request, 'shop/order_list.html', {'orders': orders})
 
 
+# ==============================================================================
+# WISHLIST VIEWS
+# ==============================================================================
+
 class WishlistToggleView(LoginRequiredMixin, View):
     def post(self, request, product_id):
         product = get_object_or_404(Product, id=product_id)
         wishlist_item, created = Wishlist.objects.get_or_create(user=request.user, product=product)
+        
         if not created:
             wishlist_item.delete()
-            messages.info(request, f"Removed {product.name} from your wishlist.")
+            messages.info(request, f"Removed '{product.name}' from your wishlist.")
         else:
-            messages.success(request, f"Added {product.name} to your wishlist.")
+            messages.success(request, f"Added '{product.name}' to your wishlist.")
+            
         return redirect('shop:product_detail', slug=product.slug)
 
 
@@ -217,3 +322,16 @@ class WishlistView(LoginRequiredMixin, View):
     def get(self, request):
         wishlist = Wishlist.objects.filter(user=request.user)
         return render(request, 'shop/wishlist.html', {'wishlist': wishlist})
+
+
+# ==============================================================================
+# SIGNALS (Automated Cart Sync on User Login)
+# ==============================================================================
+
+@receiver(user_logged_in)
+def on_user_logged_in(sender, request, user, **kwargs):
+    """
+    Triggers automatically whenever a user logs in (via standard Django login forms, 
+    social auth, or admin) to merge their guest session cart with their DB items.
+    """
+    merge_guest_cart_to_user(request, user)

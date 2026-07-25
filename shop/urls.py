@@ -18,4 +18,5 @@ urlpatterns = [
     path('wishlist/', views.WishlistView.as_view(), name='wishlist'),
     path('wishlist/toggle/<int:product_id>/', views.WishlistToggleView.as_view(), name='wishlist_toggle'),
     path('register/', views.RegisterView.as_view(), name='register'),
+    path('logout/', views.CustomLogoutView.as_view(), name='logout'),  # <-- ADDED LOGOUT ROUTE
 ]
