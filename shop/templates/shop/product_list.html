@@ -53,13 +53,13 @@
                                 </h5>
 
                                 <div class="mt-auto">
-                                    <!-- Price & Strikethrough Display -->
+                                    <!-- Price & Strikethrough Display (Replaced $ with ₹) -->
                                     <p class="card-text mb-2">
                                         {% if product.discount_price %}
-                                            <strong class="text-primary fs-5">${{ product.discount_price }}</strong>
-                                            <small class="text-muted text-decoration-line-through ms-1">${{ product.price }}</small>
+                                            <strong class="text-primary fs-5">₹{{ product.discount_price }}</strong>
+                                            <small class="text-muted text-decoration-line-through ms-1">₹{{ product.price }}</small>
                                         {% else %}
-                                            <strong class="text-primary fs-5">${{ product.price }}</strong>
+                                            <strong class="text-primary fs-5">₹{{ product.price }}</strong>
                                         {% endif %}
                                     </p>
 

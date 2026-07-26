@@ -24,7 +24,8 @@
         <div class="col-md-5">
             <div class="card border-0 shadow-sm p-4">
                 <h5 class="fw-bold mb-3">Total Amount</h5>
-                <h3 class="text-primary fw-bold mb-4">${{ cart.get_total_price }}</h3>
+                <!-- Replaced $ with ₹ -->
+                <h3 class="text-primary fw-bold mb-4">₹{{ cart.get_total_price }}</h3>
                 <button type="submit" class="btn btn-success btn-lg rounded-pill w-100">Place Order</button>
             </div>
         </div>

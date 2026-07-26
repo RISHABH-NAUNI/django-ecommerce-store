@@ -89,6 +89,6 @@ LOGOUT_REDIRECT_URL = 'shop:product_list'
 
 
 CART_SESSION_ID = 'cart'
-RAZORPAY_KEY_ID = 'rzp_test_YourTestKeyIdHere'
-RAZORPAY_KEY_SECRET = 'YourTestKeySecretHere'
+RAZORPAY_KEY_ID = 'rzp_test_TI2XtRFz7s0uTp'
+RAZORPAY_KEY_SECRET = 'NS5aJJ318ThsGNUyveJ6XgvO'
 

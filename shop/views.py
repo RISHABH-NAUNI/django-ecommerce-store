@@ -34,22 +34,17 @@ def merge_guest_cart_to_user(request, user):
     cart_key = getattr(settings, 'CART_SESSION_ID', 'cart')
     session_cart = request.session.get(cart_key, {})
 
-    # 1. Sync guest session items into Database
     for product_id, item_data in session_cart.items():
         try:
             product = Product.objects.get(id=int(product_id))
-            cart_item, created = CartItem.objects.get_or_create(
+            CartItem.objects.update_or_create(
                 user=user, 
                 product=product,
                 defaults={'quantity': item_data['quantity']}
             )
-            if not created:
-                cart_item.quantity += item_data['quantity']
-                cart_item.save()
         except (Product.DoesNotExist, ValueError):
             continue
 
-    # 2. Re-populate session from DB for consistency
     user_db_items = CartItem.objects.filter(user=user)
     updated_session_cart = {}
     
@@ -80,7 +75,7 @@ class RegisterView(View):
             user.set_password(form.cleaned_data['password'])
             user.save()
             login(request, user)
-            merge_guest_cart_to_user(request, user)  # Sync guest cart to DB
+            merge_guest_cart_to_user(request, user)
             messages.success(request, f"Welcome {user.username}, account created successfully!")
             return redirect('shop:product_list')
         return render(request, 'registration/register.html', {'form': form})
@@ -94,14 +89,11 @@ class CustomLogoutView(View):
         return self._perform_logout(request)
 
     def _perform_logout(self, request):
-        # 1. Save active cart data before flushing session
         cart_key = getattr(settings, 'CART_SESSION_ID', 'cart')
         saved_cart = request.session.get(cart_key, {})
 
-        # 2. Perform standard logout
         logout(request)
 
-        # 3. Restore cart back into the new anonymous guest session
         request.session[cart_key] = saved_cart
         request.session.modified = True
 
@@ -146,7 +138,7 @@ class ProductDetailView(DetailView):
 
 
 # ==============================================================================
-# CART VIEWS (Protected with LoginRequiredMixin)
+# CART VIEWS
 # ==============================================================================
 
 class CartDetailView(View):
@@ -155,31 +147,47 @@ class CartDetailView(View):
         return render(request, 'shop/cart.html', {'cart': cart})
 
 
-class CartAddView(LoginRequiredMixin, View):  # Protected: requires login
+class CartAddView(LoginRequiredMixin, View):
     def post(self, request, product_id):
         return self._add_to_cart(request, product_id)
 
     def get(self, request, product_id):
-        # Triggered when redirected here after logging in via GET
         return self._add_to_cart(request, product_id)
 
     def _add_to_cart(self, request, product_id):
         cart = Cart(request)
         product = get_object_or_404(Product, id=product_id)
         
-        try:
-            quantity = int(request.POST.get('quantity', 1)) if request.method == 'POST' else 1
-        except (ValueError, TypeError):
-            quantity = 1
+        data = request.POST if request.method == 'POST' else request.GET
 
-        override = request.POST.get('override', False)
-        
-        cart.add(product=product, quantity=quantity, override_quantity=override)
-        messages.success(request, f"Added '{product.name}' to your cart.")
+        try:
+            requested_qty = int(data.get('quantity', 1))
+            if requested_qty <= 0:
+                requested_qty = 1
+        except (ValueError, TypeError):
+            requested_qty = 1
+
+        raw_override = data.get('override', False)
+        override = str(raw_override).lower() in ['true', '1', 't']
+
+        # Determine target total quantity
+        current_cart_qty = cart.cart.get(str(product.id), {}).get('quantity', 0)
+        target_qty = requested_qty if override else (current_cart_qty + requested_qty)
+
+        # Validate against available stock
+        if target_qty > product.stock:
+            messages.error(
+                request, 
+                f"Cannot add {requested_qty} item(s) of '{product.name}'. Only {product.stock} left in stock."
+            )
+            return redirect('shop:cart_detail')
+
+        cart.add(product=product, quantity=requested_qty, override_quantity=override)
+        messages.success(request, f"Updated '{product.name}' in your cart.")
         return redirect('shop:cart_detail')
 
 
-class CartRemoveView(LoginRequiredMixin, View):  # Protected: requires login
+class CartRemoveView(LoginRequiredMixin, View):
     def post(self, request, product_id):
         cart = Cart(request)
         product = get_object_or_404(Product, id=product_id)
@@ -205,9 +213,21 @@ class CheckoutView(LoginRequiredMixin, View):
         if len(cart) == 0:
             return redirect('shop:product_list')
 
+        # Stock Validation
+        for item in cart:
+            product = item['product']
+            quantity = item['quantity']
+            if product.stock < quantity:
+                messages.error(
+                    request, 
+                    f"Insufficient stock for '{product.name}'. Only {product.stock} available."
+                )
+                return redirect('shop:cart_detail')
+
         address = request.POST.get('shipping_address')
         payment_method = request.POST.get('payment_method', 'COD')
 
+        # Create Order
         order = Order.objects.create(
             user=request.user,
             order_id=f"ORD-{get_random_string(8).upper()}",
@@ -218,14 +238,22 @@ class CheckoutView(LoginRequiredMixin, View):
             order_status='pending'
         )
 
+        # Create Items & Deduct Stock
         for item in cart:
+            product = item['product']
+            quantity = item['quantity']
+
             OrderItem.objects.create(
                 order=order,
-                product=item['product'],
+                product=product,
                 price=item['price'],
-                quantity=item['quantity']
+                quantity=quantity
             )
 
+            product.stock -= quantity
+            product.save()
+
+        # Payment Routing
         if payment_method == 'RAZORPAY':
             return redirect('shop:initiate_payment', order_id=order.order_id)
         else:
@@ -239,11 +267,15 @@ class InitiatePaymentView(LoginRequiredMixin, View):
         order = get_object_or_404(Order, order_id=order_id, user=request.user)
         amount_in_paise = int(order.total_amount * 100)
 
-        razorpay_order = razorpay_client.order.create({
-            "amount": amount_in_paise,
-            "currency": "INR",
-            "payment_capture": "1"
-        })
+        try:
+            razorpay_order = razorpay_client.order.create({
+                "amount": amount_in_paise,
+                "currency": "INR",
+                "payment_capture": "1"
+            })
+        except Exception as e:
+            messages.error(request, f"Razorpay initiation failed: {str(e)}")
+            return redirect('shop:checkout')
 
         context = {
             'order': order,
@@ -257,11 +289,23 @@ class InitiatePaymentView(LoginRequiredMixin, View):
 
 @method_decorator(csrf_exempt, name='dispatch')
 class PaymentCallbackView(View):
-    def post(self, request):
-        payment_id = request.POST.get('razorpay_payment_id', '')
-        razorpay_order_id = request.POST.get('razorpay_order_id', '')
-        signature = request.POST.get('razorpay_signature', '')
-        order_id = request.POST.get('order_id', '')
+    def post(self, request, *args, **kwargs):
+        return self._process_payment(request)
+
+    def get(self, request, *args, **kwargs):
+        return self._process_payment(request)
+
+    def _process_payment(self, request):
+        data = request.POST if request.POST else request.GET
+
+        payment_id = data.get('razorpay_payment_id', '')
+        razorpay_order_id = data.get('razorpay_order_id', '')
+        signature = data.get('razorpay_signature', '')
+        order_id = data.get('order_id', '')
+
+        if not order_id:
+            messages.error(request, "Order ID missing.")
+            return redirect('shop:checkout')
 
         order = get_object_or_404(Order, order_id=order_id)
         params_dict = {
@@ -272,6 +316,7 @@ class PaymentCallbackView(View):
 
         try:
             razorpay_client.utility.verify_payment_signature(params_dict)
+            
             order.payment_status = 'paid'
             order.order_status = 'processing'
             order.save()
@@ -281,6 +326,7 @@ class PaymentCallbackView(View):
 
             messages.success(request, f"Payment successful for Order #{order.order_id}!")
             return redirect('shop:order_detail', order_id=order.order_id)
+
         except Exception:
             order.payment_status = 'failed'
             order.save()
@@ -298,6 +344,25 @@ class OrderListView(LoginRequiredMixin, View):
     def get(self, request):
         orders = Order.objects.filter(user=request.user)
         return render(request, 'shop/order_list.html', {'orders': orders})
+
+
+class CancelOrderView(LoginRequiredMixin, View):
+    def post(self, request, order_id):
+        order = get_object_or_404(Order, order_id=order_id, user=request.user)
+
+        if order.order_status in ['pending', 'processing']:
+            order.order_status = 'cancelled'
+            order.save()
+
+            for item in order.items.all():
+                item.product.stock += item.quantity
+                item.product.save()
+
+            messages.success(request, f"Order #{order.order_id} has been cancelled.")
+        else:
+            messages.error(request, "This order cannot be cancelled.")
+
+        return redirect('shop:order_detail', order_id=order.order_id)
 
 
 # ==============================================================================
@@ -325,13 +390,9 @@ class WishlistView(LoginRequiredMixin, View):
 
 
 # ==============================================================================
-# SIGNALS (Automated Cart Sync on User Login)
+# SIGNALS
 # ==============================================================================
 
 @receiver(user_logged_in)
 def on_user_logged_in(sender, request, user, **kwargs):
-    """
-    Triggers automatically whenever a user logs in (via standard Django login forms, 
-    social auth, or admin) to merge their guest session cart with their DB items.
-    """
     merge_guest_cart_to_user(request, user)

@@ -22,12 +22,15 @@
             var form = document.createElement("form");
             form.method = "POST";
             form.action = "{% url 'shop:payment_callback' %}";
+
             var fields = {
+                'csrfmiddlewaretoken': '{{ csrf_token }}',
                 'razorpay_payment_id': response.razorpay_payment_id,
                 'razorpay_order_id': response.razorpay_order_id,
                 'razorpay_signature': response.razorpay_signature,
                 'order_id': '{{ order.order_id }}'
             };
+
             for (var key in fields) {
                 var input = document.createElement("input");
                 input.type = "hidden";
@@ -39,57 +42,18 @@
             form.submit();
         }
     };
+
     var rzp = new Razorpay(options);
-    document.getElementById('rzp-button').onclick = function(e){
+
+    // Auto-open modal on page load
+    window.onload = function() {
         rzp.open();
-        e.preventDefault();
-    }
-</script>
-{% extends 'base.html' %}
-
-{% block content %}
-<div class="text-center py-5">
-    <div class="card border-0 shadow-sm p-5 mx-auto" style="max-width: 500px;">
-        <h3 class="fw-bold mb-3">Complete Payment</h3>
-        <p class="text-muted">Order ID: #{{ order.order_id }}</p>
-        <h2 class="text-primary fw-bold mb-4">₹{{ order.total_amount }}</h2>
-        <button id="rzp-button" class="btn btn-success btn-lg rounded-pill w-100">Pay Now</button>
-    </div>
-</div>
-
-<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
-<script>
-    var options = {
-        "key": "{{ razorpay_merchant_key }}",
-        "amount": "{{ amount }}",
-        "currency": "{{ currency }}",
-        "name": "DjangoStore",
-        "order_id": "{{ razorpay_order_id }}",
-        "handler": function (response){
-            var form = document.createElement("form");
-            form.method = "POST";
-            form.action = "{% url 'shop:payment_callback' %}";
-            var fields = {
-                'razorpay_payment_id': response.razorpay_payment_id,
-                'razorpay_order_id': response.razorpay_order_id,
-                'razorpay_signature': response.razorpay_signature,
-                'order_id': '{{ order.order_id }}'
-            };
-            for (var key in fields) {
-                var input = document.createElement("input");
-                input.type = "hidden";
-                input.name = key;
-                input.value = fields[key];
-                form.appendChild(input);
-            }
-            document.body.appendChild(form);
-            form.submit();
-        }
     };
-    var rzp = new Razorpay(options);
+
+    // Manual fallback button
     document.getElementById('rzp-button').onclick = function(e){
         rzp.open();
         e.preventDefault();
-    }
+    };
 </script>
 {% endblock %}

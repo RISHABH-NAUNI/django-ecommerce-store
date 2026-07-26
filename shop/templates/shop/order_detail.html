@@ -1,12 +1,33 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="card border-0 shadow-sm p-4">
-    <h3 class="fw-bold text-success mb-3"><i class="fa-solid fa-circle-check me-2"></i>Order Confirmation</h3>
+<div class="card border-0 shadow-sm p-4 mx-auto style="max-width: 700px;">
+    <h3 class="fw-bold text-success mb-3"><i class="fa-solid fa-circle-check me-2"></i>Order Details</h3>
     <p><strong>Order ID:</strong> #{{ order.order_id }}</p>
-    <p><strong>Total Amount:</strong> ${{ order.total_amount }}</p>
-    <p><strong>Payment Status:</strong> <span class="badge bg-primary">{{ order.payment_status }}</span></p>
-    <p><strong>Order Status:</strong> <span class="badge bg-warning text-dark">{{ order.order_status }}</span></p>
+    <p><strong>Total Amount:</strong> ₹{{ order.total_amount }}</p>
+
+    <p><strong>Payment Status:</strong> 
+        {% if order.payment_status == 'paid' %}
+            <span class="badge bg-success">Paid</span>
+        {% elif order.payment_status == 'failed' %}
+            <span class="badge bg-danger">Failed</span>
+        {% else %}
+            <span class="badge bg-secondary">{{ order.payment_status|title }}</span>
+        {% endif %}
+    </p>
+
+    <p><strong>Order Status:</strong> 
+        {% if order.order_status == 'cancelled' %}
+            <span class="badge bg-danger">Cancelled</span>
+        {% elif order.order_status == 'delivered' %}
+            <span class="badge bg-success">Delivered</span>
+        {% elif order.order_status == 'processing' %}
+            <span class="badge bg-info text-dark">Processing</span>
+        {% else %}
+            <span class="badge bg-warning text-dark">{{ order.order_status|title }}</span>
+        {% endif %}
+    </p>
+
     <p><strong>Shipping Address:</strong> {{ order.shipping_address }}</p>
     
     <h5 class="fw-bold mt-4 mb-3">Order Items</h5>
@@ -14,14 +35,28 @@
         {% for item in order.items.all %}
             <li class="list-group-item d-flex justify-content-between align-items-center">
                 <div>
-                    <h6>{{ item.product.name }}</h6>
+                    <h6 class="mb-1">{{ item.product.name }}</h6>
                     <small class="text-muted">Qty: {{ item.quantity }}</small>
                 </div>
-                <span>${{ item.get_total }}</span>
+                <span class="fw-bold">₹{{ item.price }}</span>
             </li>
         {% endfor %}
     </ul>
 
-    <a href="{% url 'shop:product_list' %}" class="btn btn-outline-primary rounded-pill">Back to Store</a>
+    <div class="d-flex justify-content-between align-items-center">
+        <a href="{% url 'shop:product_list' %}" class="btn btn-outline-primary rounded-pill">
+            Back to Store
+        </a>
+
+        <!-- Cancel Order Button (Shown only for pending/processing orders) -->
+        {% if order.order_status == 'pending' or order.order_status == 'processing' %}
+            <form action="{% url 'shop:cancel_order' order.order_id %}" method="POST" class="d-inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline-danger rounded-pill" onclick="return confirm('Are you sure you want to cancel Order #{{ order.order_id }}?');">
+                    Cancel Order
+                </button>
+            </form>
+        {% endif %}
+    </div>
 </div>
 {% endblock %}

@@ -19,14 +19,14 @@
             <h2 class="fw-bold mb-2">{{ product.name }}</h2>
             <p class="text-muted mb-3">Category: <span class="fw-semibold">{{ product.category.name }}</span></p>
 
-            <!-- Price & Discount Display -->
+            <!-- Price & Discount Display (Replaced $ with ₹) -->
             <div class="mb-3">
                 {% if product.discount_price %}
-                    <h3 class="text-primary d-inline fw-bold">${{ product.discount_price }}</h3>
-                    <span class="text-muted text-decoration-line-through ms-2 fs-5">${{ product.price }}</span>
+                    <h3 class="text-primary d-inline fw-bold">₹{{ product.discount_price }}</h3>
+                    <span class="text-muted text-decoration-line-through ms-2 fs-5">₹{{ product.price }}</span>
                     <span class="badge bg-danger ms-2">Sale</span>
                 {% else %}
-                    <h3 class="text-primary fw-bold">${{ product.price }}</h3>
+                    <h3 class="text-primary fw-bold">₹{{ product.price }}</h3>
                 {% endif %}
             </div>
 
@@ -57,7 +57,7 @@
                     <button class="btn btn-secondary btn-lg" disabled>Out of Stock</button>
                 {% endif %}
 
-                <!-- Wishlist Toggle Form (POST method for CSRF security & View compatibility) -->
+                <!-- Wishlist Toggle Form -->
                 <form action="{% url 'shop:wishlist_toggle' product.id %}" method="post" class="d-inline">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-outline-danger btn-lg">
