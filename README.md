@@ -8,7 +8,6 @@ A full-stack, responsive E-Commerce web application built using Django, SQLite, 
 
 * **Live Demo URL:** [https://rishabh1nauni.pythonanywhere.com](https://rishabh1nauni.pythonanywhere.com)
 * **Admin Panel:** [https://rishabh1nauni.pythonanywhere.com/admin/](https://rishabh1nauni.pythonanywhere.com/admin/)
-* **Project Task Reference Link:** [Replace this text with your task/assignment submission link]
 
 ---
 
@@ -39,5 +38,5 @@ Follow these steps to run this project on your local machine:
 
 ### 1. Clone the Repository
 ```bash
-git clone [https://github.com/YOUR_USERNAME/django-ecommerce-store.git](https://github.com/YOUR_USERNAME/django-ecommerce-store.git)
+git clone [https://github.com/RISHABH-NAUNI/django-ecommerce-store](https://github.com/RISHABH-NAUNI/django-ecommerce-store)
 cd django-ecommerce-store
